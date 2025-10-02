@@ -29,11 +29,19 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   // Audio file path - replace with your .mp3 file path
   private audioPath = '/assets/audio/ZAZ - Champs Elysees.mp3';
 
+  // Beat/onset data
+  private onsets: number[] = [];
+  private currentBeatIndex = 0;
+  beatPulseStrength = 0;
+  private beatPulseDecay = 0.95;
+  private lastBeatTime = -1;
+  private beatCooldown = 0.15; // Minimum time between beats in seconds
+
   // Sample pitch analysis data structure
-  pitchAnalysisData = data.pitch_analysis
+  pitchAnalysisData = data.pitch_analysis;
 
   ngOnInit(): void {
-    // Component initialization
+    this.loadBeatData();
   }
 
   ngAfterViewInit(): void {
@@ -114,11 +122,11 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.isPlaying && !this.isDragging && this.sound) {
       this.currentTime = this.sound.seek() as number || 0;
       this.updateVisualizationByTime(this.currentTime);
+      this.checkForBeat(this.currentTime);
     }
 
-    // Rotate the sphere for visual interest
-    this.sphere.rotation.x += 0.01;
-    this.sphere.rotation.y += 0.01;
+    // Apply beat pulse decay
+    this.beatPulseStrength *= this.beatPulseDecay;
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -137,15 +145,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   private initAudio(): void {
     this.sound = new Howl({
       src: [this.audioPath],
-      html5: true, // Use HTML5 Audio for better control
+      html5: true,
       onload: () => {
         this.duration = this.sound.duration();
         console.log('Audio loaded, duration:', this.duration);
       },
       onloaderror: (id, error) => {
         console.error('Error loading audio:', error);
-        // Fallback: create a dummy duration for development
-        this.duration = 180; // 3 minutes fallback
+        this.duration = 180;
       },
       onplay: () => {
         this.isPlaying = true;
@@ -172,18 +179,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isDragging = true;
   }
 
-  onSliderChange(event: Event): void {
-    const target = event.target as HTMLInputElement;
-    this.currentTime = parseFloat(target.value);
-    
-    if (this.sound) {
-      this.sound.seek(this.currentTime);
-    }
-    
-    // Update visualization based on current time
-    this.updateVisualizationByTime(this.currentTime);
-  }
-
   onSliderEnd(): void {
     this.isDragging = false;
   }
@@ -198,8 +193,47 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.duration > 0 ? (this.currentTime / this.duration) * 100 : 0;
   }
 
+  private loadBeatData(): void {
+    this.onsets = data.temporal_features.onsets;
+    console.log('Loaded', this.onsets.length, 'beat onsets');
+  }
+
+  private checkForBeat(currentTime: number): void {
+    const lookAheadWindow = 0.05;
+    
+    while (this.currentBeatIndex < this.onsets.length) {
+      const beatTime = this.onsets[this.currentBeatIndex];
+      
+      if (beatTime <= currentTime && beatTime >= currentTime - lookAheadWindow) {
+        // Check if enough time has passed since last beat (debouncing)
+        if (currentTime - this.lastBeatTime >= this.beatCooldown) {
+          this.triggerBeatPulse();
+          this.lastBeatTime = currentTime;
+        }
+        this.currentBeatIndex++;
+      } else if (beatTime > currentTime) {
+        break;
+      } else {
+        this.currentBeatIndex++;
+      }
+    }
+  }
+
+  private triggerBeatPulse(): void {
+    this.beatPulseStrength = 1.0;
+    
+    const material = this.sphere.material as THREE.MeshPhongMaterial;
+    const currentColor = material.color.getHSL({ h: 0, s: 0, l: 0 });
+    
+    // Smoother color transition
+    material.color.setHSL(
+      currentColor.h,
+      Math.min(currentColor.s + 0.15, 1),
+      Math.min(currentColor.l + 0.2, 0.85)
+    );
+  }
+
   updateVisualizationByTime(currentTime: number): void {
-    // Find the closest data point based on current time
     let closestIndex = 0;
     let closestTimeDiff = Math.abs(this.pitchAnalysisData[0].time - currentTime);
 
@@ -217,26 +251,41 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   updateVisualization(timeIndex: number): void {
     if (timeIndex < this.pitchAnalysisData.length) {
       const currentData = this.pitchAnalysisData[timeIndex];
-      console.debug('Current pitch data at time', currentData.time + 's:', currentData);
       
       // Update sphere color based on dominant pitch strength
       if (currentData.dominant_pitches && currentData.dominant_pitches.length > 0) {
         const dominantStrength = currentData.dominant_pitches[0].strength;
-        const hue = dominantStrength * 360; // Map strength to hue
+        const hue = dominantStrength * 360;
         const saturation = 70;
-        const lightness = 50 + (dominantStrength * 30); // Brighter with stronger signal
+        const lightness = 50 + (dominantStrength * 30);
         
         const material = this.sphere.material as THREE.MeshPhongMaterial;
         material.color.setHSL(hue / 360, saturation / 100, lightness / 100);
       }
       
-      // Scale sphere based on overall pitch activity
-      const avgPitchStrength = Object.values(currentData.all_pitches)
-        .reduce((sum, strength) => sum + strength, 0) / 12;
-      const scale = 1 + (avgPitchStrength * 2); // Scale from 1 to 3
-      this.sphere.scale.setScalar(scale);
-      
-      // Future: More sophisticated 3D visualization based on pitch strengths
+      // Scale sphere with smoother pulse effect
+      const baseScale = 1;
+      const pulseScale = baseScale + (this.beatPulseStrength * 0.3); // Reduced from 0.5
+      this.sphere.scale.setScalar(pulseScale);
     }
+  }
+
+  onSliderChange(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.currentTime = parseFloat(target.value);
+    
+    if (this.sound) {
+      this.sound.seek(this.currentTime);
+    }
+    
+    this.currentBeatIndex = this.onsets.findIndex(onset => onset >= this.currentTime);
+    if (this.currentBeatIndex === -1) {
+      this.currentBeatIndex = this.onsets.length;
+    }
+    
+    // Reset beat cooldown when scrubbing
+    this.lastBeatTime = this.currentTime - this.beatCooldown;
+    
+    this.updateVisualizationByTime(this.currentTime);
   }
 }
