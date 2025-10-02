@@ -13,8 +13,11 @@
   <div class="music-player">
     <div class="player-controls">
       <button (click)="togglePlayPause()" class="play-btn" [class.playing]="isPlaying">
-        <span *ngIf="!isPlaying">▶</span>
-        <span *ngIf="isPlaying">⏸</span>
+        @if (isPlaying) {
+          <span>⏸</span>
+        } @else {
+          <span>▶</span>
+        }
       </button>
       
       <div class="time-display">
@@ -52,7 +55,7 @@
     <canvas #threeCanvas></canvas>
   </div>
 
-  <div class="info-panel">
+  <!-- <div class="info-panel">
     <h3>Pitch Analysis Data Structure</h3>
     <p>Ready to visualize time series pitch data in 3D space</p>
     <ul>
@@ -61,5 +64,5 @@
       <li>Dominant pitches tracking</li>
       <li>Strength values from 0.0 to 1.0</li>
     </ul>
-  </div>
+  </div> -->
 </div>
