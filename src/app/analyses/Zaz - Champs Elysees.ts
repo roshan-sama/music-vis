@@ -1,6 +1,6 @@
 export const data = {
   "metadata": {
-    "filename": "test_song.mp3",
+    "filename": "ZAZ - Champs Elysees.mp3",
     "duration": 179.11201814058956,
     "sample_rate": 22050,
     "tempo": 117.45383522727273,

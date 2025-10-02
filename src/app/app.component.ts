@@ -217,7 +217,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   updateVisualization(timeIndex: number): void {
     if (timeIndex < this.pitchAnalysisData.length) {
       const currentData = this.pitchAnalysisData[timeIndex];
-      console.log('Current pitch data at time', currentData.time + 's:', currentData);
+      console.debug('Current pitch data at time', currentData.time + 's:', currentData);
       
       // Update sphere color based on dominant pitch strength
       if (currentData.dominant_pitches && currentData.dominant_pitches.length > 0) {
