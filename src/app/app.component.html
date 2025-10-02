@@ -9,8 +9,57 @@
     <button (click)="updateVisualization(1)" class="btn">Show Time 0.98s</button>
   </div>
 
+  <!-- Music Player Controls -->
+  <div class="music-player">
+    <div class="player-controls">
+      <button (click)="togglePlayPause()" class="play-btn" [class.playing]="isPlaying">
+        <span *ngIf="!isPlaying">▶</span>
+        <span *ngIf="isPlaying">⏸</span>
+      </button>
+      
+      <div class="time-display">
+        <span class="current-time">{{ formatTime(currentTime) }}</span>
+        <span class="separator">/</span>
+        <span class="total-time">{{ formatTime(duration) }}</span>
+      </div>
+    </div>
+
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="progressPercentage"></div>
+      </div>
+      <input 
+        type="range" 
+        class="time-slider"
+        [value]="currentTime" 
+        [max]="duration"
+        step="0.1"
+        (mousedown)="onSliderStart()"
+        (input)="onSliderChange($event)"
+        (mouseup)="onSliderEnd()"
+        (touchstart)="onSliderStart()"
+        (touchend)="onSliderEnd()"
+      />
+    </div>
+
+    <div class="track-info">
+      <p class="track-title">Sample Music Track</p>
+      <p class="track-subtitle">Pitch Analysis Visualization</p>
+    </div>
+  </div>
+
   <div class="canvas-container">
     <canvas #threeCanvas></canvas>
   </div>
-  
+
+  <div class="info-panel">
+    <h3>Pitch Analysis Data Structure</h3>
+    <p>Ready to visualize time series pitch data in 3D space</p>
+    <ul>
+      <li>Time-based pitch strength analysis</li>
+      <li>12 chromatic pitch classes (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)</li>
+      <li>Dominant pitches tracking</li>
+      <li>Strength values from 0.0 to 1.0</li>
+    </ul>
+  </div>
 </div>
