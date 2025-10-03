@@ -1,0 +1,54 @@
+<div class="video-player-container">
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-content">
+      <h2>Loading Frames...</h2>
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="loadingProgress"></div>
+      </div>
+      <p>{{ loadingProgress.toFixed(1) }}%</p>
+    </div>
+  </div>
+
+  <div class="video-canvas-wrapper">
+    <canvas #canvas></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="playback-controls">
+      <button (click)="previousFrame()" [disabled]="currentFrame === 0 || isLoading">
+        ⏮ Previous
+      </button>
+      <button (click)="togglePlayPause()" [disabled]="isLoading">
+        {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+      </button>
+      <button (click)="nextFrame()" [disabled]="currentFrame === totalFrames - 1 || isLoading">
+        Next ⏭
+      </button>
+    </div>
+
+    <div class="timeline">
+      <span class="frame-counter">Frame: {{ currentFrame }} / {{ totalFrames - 1 }}</span>
+      <input 
+        type="range" 
+        [min]="0" 
+        [max]="totalFrames - 1" 
+        [value]="currentFrame"
+        (input)="onSliderChange($event)"
+        [disabled]="isLoading"
+        class="timeline-slider">
+    </div>
+
+    <div class="framerate-control">
+      <label for="framerate">Frame Rate:</label>
+      <select 
+        id="framerate" 
+        [(ngModel)]="selectedFrameRate" 
+        (change)="onFrameRateChange()"
+        [disabled]="isLoading">
+        <option *ngFor="let rate of frameRates" [value]="rate">
+          {{ rate }} fps
+        </option>
+      </select>
+    </div>
+  </div>
+</div>
