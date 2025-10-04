@@ -2,14 +2,14 @@
 - Docker installed, ability to build and run docker containers
 
 # Working directory
-Ensure you're in the this directory, it should contain the Dockerfile and data/ folder
+Ensure you're in the this directory, it should contain the Dockerfile and data/ folder. Place the video file in a folder called videos/ within this data/ directory (a file called 'place-video-files-here' should guide you)
 
 # Build dockerfile
-`sudo docker build -t easymocap .`
+`docker build -t easymocap .`
 
 # Run dockerfile, mounting data directory
-`sudo docker run -it --rm -v $(pwd)/data:/app/data`
-Note: the --rm flag means the container is stopped after exiting it
+`docker run -it --rm -v $(pwd)/data:/app/data`
+Note: the --rm flag means the container is stopped after exiting it. Don't do any important work you don't want to lose outside the mounted folder
 
 # Image extraction
 Ensure that the video to analyze is placed in data/videos. E.g. mocap-backend/data/videos/dance-video.mp4
