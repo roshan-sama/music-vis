@@ -16,14 +16,13 @@ interface FrameData {
 
 // Body keypoint connections for skeleton visualization (COCO format)
 const SKELETON_CONNECTIONS = [
-  [0, 1], [0, 2], [1, 3], [2, 4],  // Head
-  [0, 5], [0, 6],                   // Shoulders
-  [5, 7], [7, 9],                   // Left arm
-  [6, 8], [8, 10],                  // Right arm
-  [5, 11], [6, 12],                 // Torso
-  [11, 13], [13, 15],               // Left leg
-  [12, 14], [14, 16],               // Right leg
-  [11, 12]                          // Hip connection
+  [0,1], 
+  [1,2], [2, 3], [3,4], // Right arm
+  [1,5], [5,6], [6,7],  // Left arm
+  [1,8], // Spine
+  [8,9], [8,10],[9,10], [10,11], // Right leg
+  [8,12],[8,13], [12,13],[13,14], 
+  // [8,12], , // Right leg
 ];
 
 @Component({
@@ -65,8 +64,8 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
     this.ctx = canvas.getContext('2d')!;
     
     // Set canvas size (matching your video dimensions)
-    canvas.width = 720;
-    canvas.height = 1280;
+    canvas.width = 1920;
+    canvas.height = 1080;
     
     this.loadFrames();
   }
