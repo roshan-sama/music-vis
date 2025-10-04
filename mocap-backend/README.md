@@ -8,7 +8,7 @@ Ensure you're in the this directory, it should contain the Dockerfile and data/ 
 `docker build -t easymocap .`
 
 # Run dockerfile, mounting data directory
-`docker run -it --rm -v $(pwd)/data:/app/data`
+`docker run -it --rm -v $(pwd)/data:/app/data easymocap`
 Note: the --rm flag means the container is stopped after exiting it. Don't do any important work you don't want to lose outside the mounted folder
 
 # Image extraction

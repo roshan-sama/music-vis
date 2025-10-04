@@ -8,7 +8,7 @@ Ensure you're in the this directory, it should contain the Dockerfile and data/ 
 `docker build -t audio-analyzer .`
 
 # Run the container with mounted directory:
-`docker run -it --rm -v $(pwd)/data:/app/data`
+`docker run -it --rm -v $(pwd)/data:/app/data audio-analyzer`
 Note: the --rm flag means the container is stopped after exiting it. Don't do any important work you don't want to lose outside the mounted folder
 
 # Extract audio
