@@ -21,8 +21,7 @@ const SKELETON_CONNECTIONS = [
   [1,5], [5,6], [6,7],  // Left arm
   [1,8], // Spine
   [8,9], [8,10],[9,10], [10,11], // Right leg
-  [8,12],[8,13], [12,13],[13,14], 
-  // [8,12], , // Right leg
+  [8,12],[8,13], [12,13],[13,14], // Left leg
 ];
 
 @Component({
