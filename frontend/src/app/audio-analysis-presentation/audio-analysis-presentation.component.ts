@@ -1,5 +1,15 @@
 // audio-analysis-presentation.component.ts
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, AfterViewInit, Input, Output, EventEmitter } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  ElementRef,
+  ViewChild,
+  AfterViewInit,
+  Input,
+  Output,
+  EventEmitter,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import * as THREE from 'three';
@@ -26,62 +36,75 @@ interface AnalysisData {
       <div class="canvas-wrapper">
         <canvas #threeCanvas></canvas>
       </div>
-      
+
       <div class="info-overlay">
         <h3>Audio Analysis</h3>
         <p>3D pitch visualization with beat detection</p>
       </div>
     </div>
   `,
-  styles: [`
-    .audio-container {
-      width: 100%;
-      height: 100%;
-      position: relative;
-      background: radial-gradient(circle at center, #1a1a2e 0%, #16213e 50%, #0f0f0f 100%);
-      border-radius: 10px;
-      overflow: hidden;
-    }
+  styles: [
+    `
+      .audio-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        background: radial-gradient(
+          circle at center,
+          #1a1a2e 0%,
+          #16213e 50%,
+          #0f0f0f 100%
+        );
+        border-radius: 10px;
+        overflow: hidden;
+      }
 
-    .canvas-wrapper {
-      width: 100%;
-      height: 100%;
-    }
+      .canvas-wrapper {
+        width: 100%;
+        height: 100%;
+      }
 
-    canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
 
-    .info-overlay {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 15px 20px;
-      border-radius: 8px;
-      backdrop-filter: blur(10px);
-    }
+      .info-overlay {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background: rgba(0, 0, 0, 0.6);
+        padding: 15px 20px;
+        border-radius: 8px;
+        backdrop-filter: blur(10px);
+      }
 
-    .info-overlay h3 {
-      margin: 0 0 5px 0;
-      color: #4a90e2;
-      font-size: 1.2rem;
-    }
+      .info-overlay h3 {
+        margin: 0 0 5px 0;
+        color: #4a90e2;
+        font-size: 1.2rem;
+      }
 
-    .info-overlay p {
-      margin: 0;
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 0.9rem;
-    }
-  `]
+      .info-overlay p {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+      }
+    `,
+  ],
 })
-export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit, OnDestroy {
-  @ViewChild('threeCanvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
-  
+export class AudioAnalysisPresentationComponent
+  implements OnInit, AfterViewInit, OnDestroy
+{
+  @ViewChild('threeCanvas', { static: true })
+  canvasRef!: ElementRef<HTMLCanvasElement>;
+
   @Input() analysisId!: string;
   @Input() set externalTime(time: number) {
+    if (this.sound.playing()) {
+      return;
+    }
     if (time !== undefined && this.sound) {
       this.currentTime = time;
       if (this.sound.playing()) {
@@ -99,11 +122,11 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
       }
     }
   }
-  
+
   @Output() timeUpdate = new EventEmitter<number>();
   @Output() durationLoaded = new EventEmitter<number>();
   @Output() playStateChange = new EventEmitter<boolean>();
-  
+
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
   private renderer!: THREE.WebGLRenderer;
@@ -113,7 +136,7 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
   private sound!: Howl;
   currentTime = 0;
   duration = 0;
-  
+
   private onsets: number[] = [];
   private currentBeatIndex = 0;
   beatPulseStrength = 0;
@@ -150,7 +173,9 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
 
   private async loadAnalysisData(): Promise<void> {
     try {
-      const data = await this.http.get<AnalysisData>(`assets/analyses/${this.analysisId}.json`).toPromise();
+      const data = await this.http
+        .get<AnalysisData>(`assets/analyses/${this.analysisId}.json`)
+        .toPromise();
       if (data) {
         this.pitchAnalysisData = data.pitch_analysis;
         this.onsets = data.temporal_features.onsets;
@@ -172,9 +197,9 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
     this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     this.camera.position.set(0, 0, 5);
 
-    this.renderer = new THREE.WebGLRenderer({ 
+    this.renderer = new THREE.WebGLRenderer({
       canvas: canvas,
-      antialias: true 
+      antialias: true,
     });
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -184,11 +209,11 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
 
   private createScene(): void {
     const geometry = new THREE.SphereGeometry(1, 32, 32);
-    const material = new THREE.MeshPhongMaterial({ 
+    const material = new THREE.MeshPhongMaterial({
       color: 0x4a90e2,
-      shininess: 100
+      shininess: 100,
     });
-    
+
     this.sphere = new THREE.Mesh(geometry, material);
     this.scene.add(this.sphere);
 
@@ -208,7 +233,7 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
     this.animationId = requestAnimationFrame(() => this.animate());
 
     if (this.sound && this.sound.playing()) {
-      this.currentTime = this.sound.seek() as number || 0;
+      this.currentTime = (this.sound.seek() as number) || 0;
       this.timeUpdate.emit(this.currentTime);
       this.updateVisualizationByTime(this.currentTime);
       this.checkForBeat(this.currentTime);
@@ -230,7 +255,7 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
 
   private initAudio(): void {
     const audioPath = `/assets/audio/${this.analysisId}.mp3`;
-    
+
     this.sound = new Howl({
       src: [audioPath],
       html5: true,
@@ -250,17 +275,20 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
       onend: () => {
         this.playStateChange.emit(false);
         this.currentTime = 0;
-      }
+      },
     });
   }
 
   private checkForBeat(currentTime: number): void {
     const lookAheadWindow = 0.05;
-    
+
     while (this.currentBeatIndex < this.onsets.length) {
       const beatTime = this.onsets[this.currentBeatIndex];
-      
-      if (beatTime <= currentTime && beatTime >= currentTime - lookAheadWindow) {
+
+      if (
+        beatTime <= currentTime &&
+        beatTime >= currentTime - lookAheadWindow
+      ) {
         if (currentTime - this.lastBeatTime >= this.beatCooldown) {
           this.triggerBeatPulse();
           this.lastBeatTime = currentTime;
@@ -276,10 +304,10 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
 
   private triggerBeatPulse(): void {
     this.beatPulseStrength = 1.0;
-    
+
     const material = this.sphere.material as THREE.MeshPhongMaterial;
     const currentColor = material.color.getHSL({ h: 0, s: 0, l: 0 });
-    
+
     material.color.setHSL(
       currentColor.h,
       Math.min(currentColor.s + 0.15, 1),
@@ -291,7 +319,9 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
     if (this.pitchAnalysisData.length === 0) return;
 
     let closestIndex = 0;
-    let closestTimeDiff = Math.abs(this.pitchAnalysisData[0].time - currentTime);
+    let closestTimeDiff = Math.abs(
+      this.pitchAnalysisData[0].time - currentTime
+    );
 
     for (let i = 1; i < this.pitchAnalysisData.length; i++) {
       const timeDiff = Math.abs(this.pitchAnalysisData[i].time - currentTime);
@@ -307,19 +337,22 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
   private updateVisualization(timeIndex: number): void {
     if (timeIndex < this.pitchAnalysisData.length) {
       const currentData = this.pitchAnalysisData[timeIndex];
-      
-      if (currentData.dominant_pitches && currentData.dominant_pitches.length > 0) {
+
+      if (
+        currentData.dominant_pitches &&
+        currentData.dominant_pitches.length > 0
+      ) {
         const dominantStrength = currentData.dominant_pitches[0].strength;
         const hue = dominantStrength * 360;
         const saturation = 70;
-        const lightness = 50 + (dominantStrength * 30);
-        
+        const lightness = 50 + dominantStrength * 30;
+
         const material = this.sphere.material as THREE.MeshPhongMaterial;
         material.color.setHSL(hue / 360, saturation / 100, lightness / 100);
       }
-      
+
       const baseScale = 1;
-      const pulseScale = baseScale + (this.beatPulseStrength * 0.3);
+      const pulseScale = baseScale + this.beatPulseStrength * 0.3;
       this.sphere.scale.setScalar(pulseScale);
     }
   }
@@ -329,12 +362,12 @@ export class AudioAnalysisPresentationComponent implements OnInit, AfterViewInit
     if (this.sound) {
       this.sound.seek(time);
     }
-    
-    this.currentBeatIndex = this.onsets.findIndex(onset => onset >= time);
+
+    this.currentBeatIndex = this.onsets.findIndex((onset) => onset >= time);
     if (this.currentBeatIndex === -1) {
       this.currentBeatIndex = this.onsets.length;
     }
-    
+
     this.lastBeatTime = time - this.beatCooldown;
     this.updateVisualizationByTime(time);
   }
