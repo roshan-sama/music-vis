@@ -153,12 +153,13 @@ export class AudioAnalysisPresentationComponent
   private beatPulseDecay = 0.95;
   private lastBeatTime = -1;
   private beatCooldown = 0.15;
+  private beatCounter = 0;
 
   pitchAnalysisData: PitchData[] = [];
   spectralFeaturesData: SpectralFeature[] = [];
 
   // Translation parameters
-  private maxRadius = 5;
+  private maxRadius = 3;
   private spherePosition = new THREE.Vector2(0, 0);
   private targetPosition = new THREE.Vector2(0, 0);
   private positionLerpSpeed = 0.1;
@@ -329,6 +330,7 @@ export class AudioAnalysisPresentationComponent
         if (currentTime - this.lastBeatTime >= this.beatCooldown) {
           this.triggerBeatPulse();
           this.updateSpherePosition(currentTime);
+          this.beatCounter++;
           this.lastBeatTime = currentTime;
         }
         this.currentBeatIndex++;
@@ -357,8 +359,11 @@ export class AudioAnalysisPresentationComponent
     const normalizedRolloff = Math.min(this.smoothedRolloff / 10000, 1);
 
     // Convert to angle (0-2π) and distance (0-maxRadius)
-    const angle = normalizedCentroid * Math.PI * 2;
-    const distance = normalizedRolloff * this.maxRadius;
+    // Add 180° (π radians) rotation on every other beat
+    const baseAngle = normalizedCentroid * Math.PI * 2;
+    const rotationOffset = ((this.beatCounter % 2) * Math.PI) / 4; // 0 or π
+    const angle = baseAngle + rotationOffset;
+    const distance = normalizedRolloff * (this.maxRadius * 0.8);
 
     // Calculate new position
     const newX = Math.cos(angle) * distance;
