@@ -14,6 +14,7 @@ import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import * as THREE from 'three';
 import { Howl } from 'howler';
+import { lastValueFrom } from 'rxjs';
 
 interface PitchData {
   time: number;
@@ -24,6 +25,7 @@ interface AnalysisData {
   pitch_analysis: PitchData[];
   temporal_features: {
     onsets: number[];
+    beats: number[];
   };
 }
 
@@ -137,7 +139,7 @@ export class AudioAnalysisPresentationComponent
   currentTime = 0;
   duration = 0;
 
-  private onsets: number[] = [];
+  private beats: number[] = [];
   private currentBeatIndex = 0;
   beatPulseStrength = 0;
   private beatPulseDecay = 0.95;
@@ -173,13 +175,14 @@ export class AudioAnalysisPresentationComponent
 
   private async loadAnalysisData(): Promise<void> {
     try {
-      const data = await this.http
-        .get<AnalysisData>(`assets/analyses/${this.analysisId}.json`)
-        .toPromise();
+      const data = await lastValueFrom(
+        this.http.get<AnalysisData>(`assets/analyses/${this.analysisId}.json`)
+      );
+
       if (data) {
         this.pitchAnalysisData = data.pitch_analysis;
-        this.onsets = data.temporal_features.onsets;
-        console.log('Loaded analysis data:', this.onsets.length, 'beat onsets');
+        this.beats = data.temporal_features.beats;
+        console.log('Loaded analysis data:', this.beats.length, 'beat onsets');
       }
     } catch (error) {
       console.error('Error loading analysis data:', error);
@@ -282,8 +285,8 @@ export class AudioAnalysisPresentationComponent
   private checkForBeat(currentTime: number): void {
     const lookAheadWindow = 0.05;
 
-    while (this.currentBeatIndex < this.onsets.length) {
-      const beatTime = this.onsets[this.currentBeatIndex];
+    while (this.currentBeatIndex < this.beats.length) {
+      const beatTime = this.beats[this.currentBeatIndex];
 
       if (
         beatTime <= currentTime &&
@@ -363,9 +366,9 @@ export class AudioAnalysisPresentationComponent
       this.sound.seek(time);
     }
 
-    this.currentBeatIndex = this.onsets.findIndex((onset) => onset >= time);
+    this.currentBeatIndex = this.beats.findIndex((onset) => onset >= time);
     if (this.currentBeatIndex === -1) {
-      this.currentBeatIndex = this.onsets.length;
+      this.currentBeatIndex = this.beats.length;
     }
 
     this.lastBeatTime = time - this.beatCooldown;
