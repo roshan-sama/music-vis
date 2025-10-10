@@ -1,27 +1,31 @@
 <div class="container">
-<router-outlet></router-outlet>
-
   <header>
     <h1>3D Pitch Analysis Visualization</h1>
     <p>Three.js visualization of time series pitch data</p>
   </header>
-  
+
   <div class="controls">
     <button (click)="updateVisualization(0)" class="btn">Show Time 0.0s</button>
-    <button (click)="updateVisualization(1)" class="btn">Show Time 0.98s</button>
+    <button (click)="updateVisualization(1)" class="btn">
+      Show Time 0.98s
+    </button>
   </div>
 
   <!-- Music Player Controls -->
   <div class="music-player">
     <div class="player-controls">
-      <button (click)="togglePlayPause()" class="play-btn" [class.playing]="isPlaying">
+      <button
+        (click)="togglePlayPause()"
+        class="play-btn"
+        [class.playing]="isPlaying"
+      >
         @if (isPlaying) {
-          <span>⏸</span>
+        <span>⏸</span>
         } @else {
-          <span>▶</span>
+        <span>▶</span>
         }
       </button>
-      
+
       <div class="time-display">
         <span class="current-time">{{ formatTime(currentTime) }}</span>
         <span class="separator">/</span>
@@ -33,10 +37,10 @@
       <div class="progress-bar">
         <div class="progress-fill" [style.width.%]="progressPercentage"></div>
       </div>
-      <input 
-        type="range" 
+      <input
+        type="range"
         class="time-slider"
-        [value]="currentTime" 
+        [value]="currentTime"
         [max]="duration"
         step="0.1"
         (mousedown)="onSliderStart()"

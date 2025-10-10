@@ -1,8 +1,7 @@
-// dance-video-player.component.ts
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+// keypoint-analysis-presentation.component.ts
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, Input, Output, EventEmitter } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 
 interface Keypoint {
   x: number;
@@ -14,45 +13,81 @@ interface FrameData {
   keypoints: Keypoint[];
 }
 
-// Body keypoint connections for skeleton visualization (COCO format)
 const SKELETON_CONNECTIONS = [
-  [0,1], 
+  [0,1], // Neck
   [1,2], [2, 3], [3,4], // Right arm
-  [1,5], [5,6], [6,7],  // Left arm
+  [1,5], [5,6], [6,7], // Left arm
   [1,8], // Spine
   [8,9], [8,10],[9,10], [10,11], // Right leg
-  [8,12],[8,13], [12,13],[13,14], // Left leg
+   [8,12],[8,13], [12,13],[13,14] // Left leg
 ];
 
 @Component({
-  selector: 'app-keypoint-overlay',
+  selector: 'app-keypoint-analysis-presentation',
   standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './keypoint-overlay.component.html',
-  styleUrls: ['./keypoint-overlay.component.css']
+  imports: [CommonModule],
+  template: `
+    <div class="keypoint-container">
+      <div *ngIf="isLoading" class="loading-overlay">
+        <div class="loading-content">
+          <h3>Loading Frames...</h3>
+          <div class="progress-bar">
+            <div class="progress-fill" [style.width.%]="loadingProgress"></div>
+          </div>
+          <p>{{ loadingProgress.toFixed(1) }}%</p>
+        </div>
+      </div>
+
+      <div class="canvas-wrapper">
+        <canvas #canvas></canvas>
+      </div>
+
+      <div class="info-overlay">
+        <h3>Keypoint Analysis</h3>
+        <p>Frame: {{ currentFrame }} / {{ totalFrames - 1 }}</p>
+      </div>
+    </div>
+  `,
+  styleUrls: ['./keypoint-analysis-presentation.component.css']
 })
-export class KeypointOverlayComponent implements OnInit, OnDestroy {
+export class KeypointAnalysisPresentationComponent implements OnInit, OnDestroy {
   @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
+  
+  @Input() analysisId!: string;
+  @Input() frameRate = 30;
+  @Input() set externalTime(time: number) {
+    if (time !== undefined && !this.isLoading) {
+      const frame = Math.floor(time * this.frameRate);
+      this.seekToFrame(frame);
+    }
+  }
+  @Input() set externalPlaying(playing: boolean) {
+    if (playing !== undefined) {
+      this.isPlaying = playing;
+      if (playing) {
+        this.startPlayback();
+      } else {
+        this.stopPlayback();
+      }
+    }
+  }
+  
+  @Output() frameChange = new EventEmitter<number>();
+  @Output() framesLoaded = new EventEmitter<number>();
   
   private ctx!: CanvasRenderingContext2D;
   private animationFrameId: number | null = null;
   
-  // Video state
   currentFrame = 0;
-  totalFrames = 500; // Adjust based on your actual number of frames
+  totalFrames = 500;
   isPlaying = false;
   
-  // Frame rate options
-  frameRates = [15, 24, 30, 60];
-  selectedFrameRate = 30;
   private lastFrameTime = 0;
   
-  // Data
   private frames: HTMLImageElement[] = [];
   private frameData: FrameData[] = [];
   private loadedFrames = 0;
   
-  // Loading state
   isLoading = true;
   loadingProgress = 0;
 
@@ -62,7 +97,6 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
     const canvas = this.canvasRef.nativeElement;
     this.ctx = canvas.getContext('2d')!;
     
-    // Set canvas size (matching your video dimensions)
     canvas.width = 1920;
     canvas.height = 1080;
     
@@ -70,19 +104,17 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
-    }
+    this.stopPlayback();
   }
 
   private async loadFrames(): Promise<void> {
     const loadPromises: Promise<void>[] = [];
+    const basePath = `assets/${this.analysisId}`;
 
     for (let i = 0; i < this.totalFrames; i++) {
       const frameNum = i.toString().padStart(6, '0');
       
-      // Load image
-      const imgPromise = new Promise<void>((resolve, reject) => {
+      const imgPromise = new Promise<void>((resolve) => {
         const img = new Image();
         img.onload = () => {
           this.frames[i] = img;
@@ -92,13 +124,12 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
         };
         img.onerror = () => {
           console.warn(`Failed to load frame ${frameNum}`);
-          resolve(); // Continue even if frame fails
+          resolve();
         };
-        img.src = `assets/dance-video/${frameNum}.jpg`;
+        img.src = `${basePath}/${frameNum}.jpg`;
       });
 
-      // Load JSON data
-      const jsonPromise = this.http.get<any>(`assets/dance-video/${frameNum}.json`)
+      const jsonPromise = this.http.get<any>(`${basePath}/${frameNum}.json`)
         .toPromise()
         .then(data => {
           if (data && data.annots && data.annots.length > 0) {
@@ -121,6 +152,7 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
 
     await Promise.all(loadPromises);
     this.isLoading = false;
+    this.framesLoaded.emit(this.totalFrames);
     this.renderFrame();
   }
 
@@ -128,13 +160,9 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
     const frame = this.frames[this.currentFrame];
     if (!frame) return;
 
-    // Clear canvas
     this.ctx.clearRect(0, 0, this.canvasRef.nativeElement.width, this.canvasRef.nativeElement.height);
-    
-    // Draw image
     this.ctx.drawImage(frame, 0, 0);
     
-    // Draw skeleton
     const data = this.frameData[this.currentFrame];
     if (data && data.keypoints) {
       this.drawSkeleton(data.keypoints);
@@ -142,9 +170,8 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
   }
 
   private drawSkeleton(keypoints: Keypoint[]): void {
-    const minConfidence = 0.3; // Minimum confidence threshold
+    const minConfidence = 0.3;
 
-    // Draw skeleton connections
     this.ctx.strokeStyle = '#00ff00';
     this.ctx.lineWidth = 3;
     this.ctx.lineCap = 'round';
@@ -163,7 +190,6 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
       }
     });
 
-    // Draw keypoints
     keypoints.forEach(kp => {
       if (kp.confidence > minConfidence) {
         this.ctx.fillStyle = '#ff0000';
@@ -177,59 +203,40 @@ export class KeypointOverlayComponent implements OnInit, OnDestroy {
   private animate = (timestamp: number): void => {
     if (!this.isPlaying) return;
 
-    const frameDuration = 1000 / this.selectedFrameRate;
+    const frameDuration = 1000 / this.frameRate;
     
     if (timestamp - this.lastFrameTime >= frameDuration) {
       this.lastFrameTime = timestamp;
       this.currentFrame++;
       
       if (this.currentFrame >= this.totalFrames) {
-        this.currentFrame = 0; // Loop
+        this.currentFrame = 0;
       }
       
       this.renderFrame();
+      this.frameChange.emit(this.currentFrame / this.frameRate);
     }
 
     this.animationFrameId = requestAnimationFrame(this.animate);
   };
 
-  togglePlayPause(): void {
-    this.isPlaying = !this.isPlaying;
-    
-    if (this.isPlaying) {
+  private startPlayback(): void {
+    if (!this.animationFrameId) {
       this.lastFrameTime = performance.now();
       this.animationFrameId = requestAnimationFrame(this.animate);
-    } else if (this.animationFrameId) {
+    }
+  }
+
+  private stopPlayback(): void {
+    if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
-    }
-  }
-
-  nextFrame(): void {
-    if (this.currentFrame < this.totalFrames - 1) {
-      this.currentFrame++;
-      this.renderFrame();
-    }
-  }
-
-  previousFrame(): void {
-    if (this.currentFrame > 0) {
-      this.currentFrame--;
-      this.renderFrame();
     }
   }
 
   seekToFrame(frame: number): void {
     this.currentFrame = Math.max(0, Math.min(frame, this.totalFrames - 1));
     this.renderFrame();
-  }
-
-  onFrameRateChange(): void {
-    // Frame rate change takes effect on next animation frame
-  }
-
-  onSliderChange(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    this.seekToFrame(parseInt(value, 10));
+    this.frameChange.emit(this.currentFrame / this.frameRate);
   }
 }

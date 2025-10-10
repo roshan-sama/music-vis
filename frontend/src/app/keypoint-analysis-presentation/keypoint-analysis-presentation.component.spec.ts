@@ -1,18 +1,18 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { KeypointOverlayComponent } from './keypoint-overlay.component';
+import { KeypointAnalysisPresentationComponent } from './keypoint-analysis-presentation.component';
 
 describe('KeypointOverlayComponent', () => {
-  let component: KeypointOverlayComponent;
-  let fixture: ComponentFixture<KeypointOverlayComponent>;
+  let component: KeypointAnalysisPresentationComponent;
+  let fixture: ComponentFixture<KeypointAnalysisPresentationComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [KeypointOverlayComponent]
+      imports: [KeypointAnalysisPresentationComponent]
     })
     .compileComponents();
 
-    fixture = TestBed.createComponent(KeypointOverlayComponent);
+    fixture = TestBed.createComponent(KeypointAnalysisPresentationComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

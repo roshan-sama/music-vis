@@ -1,0 +1,71 @@
+<div class="analysis-container">
+  <header class="analysis-header">
+    <button class="back-btn" (click)="goBack()">← Back to Dashboard</button>
+    <h1>{{ analysisTitle }}</h1>
+  </header>
+
+  <div class="visualization-grid">
+    <div class="viz-panel keypoint-panel">
+      <app-keypoint-analysis-presentation
+        [analysisId]="analysisId"
+        [externalTime]="currentTime"
+        [externalPlaying]="isPlaying"
+        (frameChange)="onKeypointFrameChange($event)"
+        (framesLoaded)="onKeypointFramesLoaded($event)"
+      >
+      </app-keypoint-analysis-presentation>
+    </div>
+
+    <div class="viz-panel audio-panel">
+      <app-audio-analysis-presentation
+        [analysisId]="analysisId"
+        [externalTime]="currentTime"
+        [externalPlaying]="isPlaying"
+        (timeUpdate)="onAudioTimeUpdate($event)"
+        (durationLoaded)="onAudioDurationLoaded($event)"
+        (playStateChange)="onPlayStateChange($event)"
+      >
+      </app-audio-analysis-presentation>
+    </div>
+  </div>
+
+  <div class="timeline-control">
+    <div class="playback-controls">
+      <button
+        (click)="togglePlayPause()"
+        class="play-btn"
+        [class.playing]="isPlaying"
+      >
+        @if (isPlaying) {
+        <span>⏸</span>
+        } @else {
+        <span>▶</span>
+        }
+      </button>
+
+      <div class="time-display">
+        <span class="current-time">{{ formatTime(currentTime) }}</span>
+        <span class="separator">/</span>
+        <span class="total-time">{{ formatTime(duration) }}</span>
+      </div>
+    </div>
+
+    <div class="progress-container">
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="progressPercentage"></div>
+      </div>
+      <input
+        type="range"
+        class="time-slider"
+        [value]="currentTime"
+        [max]="duration"
+        step="0.01"
+        (mousedown)="onSliderStart()"
+        (input)="onSliderChange($event)"
+        (mouseup)="onSliderEnd()"
+        (touchstart)="onSliderStart()"
+        (touchend)="onSliderEnd()"
+      />
+    </div>
+  </div>
+</div>

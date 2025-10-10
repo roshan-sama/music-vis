@@ -15,36 +15,46 @@
 
   <div class="controls">
     <div class="playback-controls">
-      <button (click)="previousFrame()" [disabled]="currentFrame === 0 || isLoading">
+      <button
+        (click)="previousFrame()"
+        [disabled]="currentFrame === 0 || isLoading"
+      >
         ⏮ Previous
       </button>
       <button (click)="togglePlayPause()" [disabled]="isLoading">
-        {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+        {{ isPlaying ? "⏸ Pause" : "▶ Play" }}
       </button>
-      <button (click)="nextFrame()" [disabled]="currentFrame === totalFrames - 1 || isLoading">
+      <button
+        (click)="nextFrame()"
+        [disabled]="currentFrame === totalFrames - 1 || isLoading"
+      >
         Next ⏭
       </button>
     </div>
 
     <div class="timeline">
-      <span class="frame-counter">Frame: {{ currentFrame }} / {{ totalFrames - 1 }}</span>
-      <input 
-        type="range" 
-        [min]="0" 
-        [max]="totalFrames - 1" 
+      <span class="frame-counter"
+        >Frame: {{ currentFrame }} / {{ totalFrames - 1 }}</span
+      >
+      <input
+        type="range"
+        [min]="0"
+        [max]="totalFrames - 1"
         [value]="currentFrame"
         (input)="onSliderChange($event)"
         [disabled]="isLoading"
-        class="timeline-slider">
+        class="timeline-slider"
+      />
     </div>
 
     <div class="framerate-control">
       <label for="framerate">Frame Rate:</label>
-      <select 
-        id="framerate" 
-        [(ngModel)]="selectedFrameRate" 
+      <select
+        id="framerate"
+        [(ngModel)]="selectedFrameRate"
         (change)="onFrameRateChange()"
-        [disabled]="isLoading">
+        [disabled]="isLoading"
+      >
         <option *ngFor="let rate of frameRates" [value]="rate">
           {{ rate }} fps
         </option>
