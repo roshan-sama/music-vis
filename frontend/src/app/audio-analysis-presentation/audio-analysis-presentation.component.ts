@@ -21,11 +21,19 @@ interface PitchData {
   dominant_pitches: Array<{ pitch: string; strength: number }>;
 }
 
+interface SpectralFeature {
+  time: number;
+  spectral_centroid: number;
+  spectral_rolloff: number;
+  zero_crossing_rate: number;
+  rms_energy: number;
+}
+
 interface AnalysisData {
   pitch_analysis: PitchData[];
   temporal_features: {
-    onsets: number[];
     beats: number[];
+    spectral_features: SpectralFeature[];
   };
 }
 
@@ -104,7 +112,7 @@ export class AudioAnalysisPresentationComponent
 
   @Input() analysisId!: string;
   @Input() set externalTime(time: number) {
-    if (this.sound.playing()) {
+    if (this.sound && this.sound.playing()) {
       return;
     }
     if (time !== undefined && this.sound) {
@@ -147,6 +155,18 @@ export class AudioAnalysisPresentationComponent
   private beatCooldown = 0.15;
 
   pitchAnalysisData: PitchData[] = [];
+  spectralFeaturesData: SpectralFeature[] = [];
+
+  // Translation parameters
+  private maxRadius = 5;
+  private spherePosition = new THREE.Vector2(0, 0);
+  private targetPosition = new THREE.Vector2(0, 0);
+  private positionLerpSpeed = 0.1;
+
+  // Low-pass filter for spectral features
+  private smoothedCentroid = 0;
+  private smoothedRolloff = 0;
+  private smoothingFactor = 0.3;
 
   constructor(private http: HttpClient) {}
 
@@ -178,11 +198,19 @@ export class AudioAnalysisPresentationComponent
       const data = await lastValueFrom(
         this.http.get<AnalysisData>(`assets/analyses/${this.analysisId}.json`)
       );
-
       if (data) {
         this.pitchAnalysisData = data.pitch_analysis;
         this.beats = data.temporal_features.beats;
-        console.log('Loaded analysis data:', this.beats.length, 'beat onsets');
+        this.spectralFeaturesData = data.temporal_features.spectral_features;
+
+        // Initialize smoothed values
+        if (this.spectralFeaturesData.length > 0) {
+          this.smoothedCentroid =
+            this.spectralFeaturesData[0].spectral_centroid;
+          this.smoothedRolloff = this.spectralFeaturesData[0].spectral_rolloff;
+        }
+
+        console.log('Loaded analysis data:', this.beats.length, 'beats');
       }
     } catch (error) {
       console.error('Error loading analysis data:', error);
@@ -243,6 +271,12 @@ export class AudioAnalysisPresentationComponent
     }
 
     this.beatPulseStrength *= this.beatPulseDecay;
+
+    // Smoothly interpolate sphere position
+    this.spherePosition.lerp(this.targetPosition, this.positionLerpSpeed);
+    this.sphere.position.x = this.spherePosition.x;
+    this.sphere.position.y = this.spherePosition.y;
+
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -257,7 +291,7 @@ export class AudioAnalysisPresentationComponent
   }
 
   private initAudio(): void {
-    const audioPath = `/assets/audio/${this.analysisId}.mp3`;
+    const audioPath = `assets/audio/${this.analysisId}.mp3`;
 
     this.sound = new Howl({
       src: [audioPath],
@@ -294,6 +328,7 @@ export class AudioAnalysisPresentationComponent
       ) {
         if (currentTime - this.lastBeatTime >= this.beatCooldown) {
           this.triggerBeatPulse();
+          this.updateSpherePosition(currentTime);
           this.lastBeatTime = currentTime;
         }
         this.currentBeatIndex++;
@@ -303,6 +338,111 @@ export class AudioAnalysisPresentationComponent
         this.currentBeatIndex++;
       }
     }
+  }
+
+  private updateSpherePosition(currentTime: number): void {
+    const spectralData = this.getSpectralFeatureAtTime(currentTime);
+    if (!spectralData) return;
+
+    // Apply low-pass filter for smoothing
+    this.smoothedCentroid =
+      this.smoothingFactor * spectralData.spectral_centroid +
+      (1 - this.smoothingFactor) * this.smoothedCentroid;
+    this.smoothedRolloff =
+      this.smoothingFactor * spectralData.spectral_rolloff +
+      (1 - this.smoothingFactor) * this.smoothedRolloff;
+
+    // Normalize spectral features to 0-1 range
+    const normalizedCentroid = Math.min(this.smoothedCentroid / 5000, 1);
+    const normalizedRolloff = Math.min(this.smoothedRolloff / 10000, 1);
+
+    // Convert to angle (0-2π) and distance (0-maxRadius)
+    const angle = normalizedCentroid * Math.PI * 2;
+    const distance = normalizedRolloff * this.maxRadius;
+
+    // Calculate new position
+    const newX = Math.cos(angle) * distance;
+    const newY = Math.sin(angle) * distance;
+    let newPosition = new THREE.Vector2(newX, newY);
+
+    // Check if new position is outside the circle
+    if (newPosition.length() > this.maxRadius) {
+      newPosition = this.mirrorPositionAtBoundary(
+        this.spherePosition,
+        newPosition
+      );
+    }
+
+    // Set target position for smooth interpolation
+    this.targetPosition.copy(newPosition);
+  }
+
+  private getSpectralFeatureAtTime(time: number): SpectralFeature | null {
+    if (this.spectralFeaturesData.length === 0) return null;
+
+    let closestIndex = 0;
+    let closestTimeDiff = Math.abs(this.spectralFeaturesData[0].time - time);
+
+    for (let i = 1; i < this.spectralFeaturesData.length; i++) {
+      const timeDiff = Math.abs(this.spectralFeaturesData[i].time - time);
+      if (timeDiff < closestTimeDiff) {
+        closestTimeDiff = timeDiff;
+        closestIndex = i;
+      }
+    }
+
+    return this.spectralFeaturesData[closestIndex];
+  }
+
+  private mirrorPositionAtBoundary(
+    currentPos: THREE.Vector2,
+    targetPos: THREE.Vector2
+  ): THREE.Vector2 {
+    // Find intersection point with circle boundary
+    const direction = new THREE.Vector2()
+      .subVectors(targetPos, currentPos)
+      .normalize();
+
+    // Calculate intersection with circle
+    const a = direction.dot(direction);
+    const b = 2 * currentPos.dot(direction);
+    const c = currentPos.dot(currentPos) - this.maxRadius * this.maxRadius;
+    const discriminant = b * b - 4 * a * c;
+
+    if (discriminant < 0) {
+      // No intersection, return normalized target
+      return targetPos.normalize().multiplyScalar(this.maxRadius * 0.95);
+    }
+
+    const t = (-b + Math.sqrt(discriminant)) / (2 * a);
+    const intersectionPoint = new THREE.Vector2()
+      .copy(currentPos)
+      .add(direction.clone().multiplyScalar(t));
+
+    // Calculate normal at intersection (points toward center)
+    const normal = intersectionPoint.clone().normalize().negate();
+
+    // Calculate reflection vector
+    const overshoot = new THREE.Vector2().subVectors(
+      targetPos,
+      intersectionPoint
+    );
+    const reflectedOvershoot = overshoot.sub(
+      normal.clone().multiplyScalar(2 * overshoot.dot(normal))
+    );
+
+    // New position is intersection + reflected overshoot
+    const mirroredPosition = new THREE.Vector2().addVectors(
+      intersectionPoint,
+      reflectedOvershoot
+    );
+
+    // Ensure we stay within bounds
+    if (mirroredPosition.length() > this.maxRadius) {
+      mirroredPosition.normalize().multiplyScalar(this.maxRadius * 0.95);
+    }
+
+    return mirroredPosition;
   }
 
   private triggerBeatPulse(): void {
@@ -366,12 +506,16 @@ export class AudioAnalysisPresentationComponent
       this.sound.seek(time);
     }
 
-    this.currentBeatIndex = this.beats.findIndex((onset) => onset >= time);
+    this.currentBeatIndex = this.beats.findIndex((beat) => beat >= time);
     if (this.currentBeatIndex === -1) {
       this.currentBeatIndex = this.beats.length;
     }
 
     this.lastBeatTime = time - this.beatCooldown;
     this.updateVisualizationByTime(time);
+
+    // Update position immediately when seeking
+    this.updateSpherePosition(time);
+    this.spherePosition.copy(this.targetPosition);
   }
 }

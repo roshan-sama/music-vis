@@ -105,7 +105,7 @@ export class KeypointAnalysisPresentationComponent
   private animationFrameId: number | null = null;
 
   currentFrame = 0;
-  totalFrames = 500;
+  totalFrames = 420; //500;
   isPlaying = false;
 
   private lastFrameTime = 0;
