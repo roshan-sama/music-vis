@@ -166,6 +166,22 @@ export class AudioAnalysisPresentationComponent
   private smoothedRolloff = 0;
   private smoothingFactor = 0.3;
 
+  // Velocity-based properties
+  private currentPosition: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private previousPosition: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private currentVelocity: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private originalVelocity: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private lastTwoBeats: number[] = [];
+  private rmsWindowStart: number = 0;
+  private maxRmsWindow: number = 4.0; // 4 seconds max
+  private lastFrameTime: number = 0;
+
+  // Velocity physics constants
+  private velocityScale: number = 1; // Scale factor for velocity magnitude
+  private accelerationScale: number = 0.2; // Scale for RMS-based acceleration
+  private returnAcceleration: number = 0.05; // Acceleration toward original velocity
+  private minVelocityThreshold: number = 0.01;
+
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
@@ -264,16 +280,42 @@ export class AudioAnalysisPresentationComponent
     if (this.sound && this.sound.playing()) {
       this.currentTime = (this.sound.seek() as number) || 0;
       this.timeUpdate.emit(this.currentTime);
+
+      // Calculate deltaTime for physics
+      const now = performance.now() / 1000; // Convert to seconds
+      const deltaTime = this.lastFrameTime > 0 ? now - this.lastFrameTime : 0;
+      this.lastFrameTime = now;
+
+      // Update color and scale based on pitch data
       this.updateVisualizationByTime(this.currentTime);
+
+      // Check for beats and update target position
       this.checkForBeat(this.currentTime);
+
+      // Update velocity based on RMS energy
+      this.updateVelocity(this.currentTime);
+
+      // Apply velocity to position
+      if (deltaTime > 0) {
+        const velocityDelta = this.currentVelocity
+          .clone()
+          .multiplyScalar(deltaTime);
+        this.spherePosition.add(velocityDelta);
+
+        // Ensure position stays within bounds
+        if (this.spherePosition.length() > this.maxRadius) {
+          this.spherePosition.normalize().multiplyScalar(this.maxRadius);
+          // Stop velocity at boundary
+          this.currentVelocity.set(0, 0);
+        }
+      }
+
+      // Update sphere mesh position
+      this.sphere.position.x = this.spherePosition.x;
+      this.sphere.position.y = this.spherePosition.y;
     }
 
     this.beatPulseStrength *= this.beatPulseDecay;
-
-    // Smoothly interpolate sphere position
-    this.spherePosition.lerp(this.targetPosition, this.positionLerpSpeed);
-    this.sphere.position.x = this.spherePosition.x;
-    this.sphere.position.y = this.spherePosition.y;
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -328,6 +370,20 @@ export class AudioAnalysisPresentationComponent
           this.triggerBeatPulse();
           this.updateSpherePosition(currentTime);
           this.beatCounter++;
+
+          // Track last two beats for RMS window
+          this.lastTwoBeats.push(currentTime);
+          if (this.lastTwoBeats.length > 2) {
+            this.lastTwoBeats.shift();
+          }
+
+          // Update RMS window start
+          if (this.lastTwoBeats.length >= 2) {
+            this.rmsWindowStart = this.lastTwoBeats[0];
+          } else {
+            this.rmsWindowStart = currentTime;
+          }
+
           this.lastBeatTime = currentTime;
         }
         this.currentBeatIndex++;
@@ -356,9 +412,8 @@ export class AudioAnalysisPresentationComponent
     const normalizedRolloff = Math.min(this.smoothedRolloff / 10000, 1);
 
     // Convert to angle (0-2π) and distance (0-maxRadius)
-    // Add 180° (π radians) rotation on every other beat
     const baseAngle = normalizedCentroid * Math.PI * 2;
-    const rotationOffset = ((this.beatCounter % 2) * Math.PI) / 4; // 0 or π
+    const rotationOffset = ((this.beatCounter % 2) * Math.PI) / 4;
     const angle = baseAngle + rotationOffset;
     const distance = normalizedRolloff * (this.maxRadius - 2);
 
@@ -372,7 +427,26 @@ export class AudioAnalysisPresentationComponent
       newPosition = new THREE.Vector2(0, 0);
     }
 
-    // Set target position for smooth interpolation
+    // Store previous position
+    this.previousPosition.copy(this.currentPosition);
+
+    // Calculate movement vector from old to new position
+    const movementVector = new THREE.Vector2().subVectors(
+      newPosition,
+      this.previousPosition
+    );
+
+    // Set original velocity proportional to movement distance
+    const movementMagnitude = movementVector.length();
+    if (movementMagnitude > 0.01) {
+      this.originalVelocity
+        .copy(movementVector)
+        .multiplyScalar(this.velocityScale);
+      this.currentVelocity.copy(this.originalVelocity);
+    }
+
+    // Set current position to new beat position
+    this.currentPosition.copy(newPosition);
     this.targetPosition.copy(newPosition);
   }
 
@@ -391,6 +465,87 @@ export class AudioAnalysisPresentationComponent
     }
 
     return this.spectralFeaturesData[closestIndex];
+  }
+
+  private getWindowedAverageRMS(currentTime: number): number {
+    // Calculate window size
+    let windowStart = this.rmsWindowStart;
+    let windowDuration = currentTime - windowStart;
+
+    // If we're waiting for a beat and window is growing
+    if (this.lastTwoBeats.length >= 2) {
+      const expectedBeatInterval = this.lastTwoBeats[1] - this.lastTwoBeats[0];
+      const timeSinceLastBeat = currentTime - this.lastBeatTime;
+
+      // If we've exceeded expected beat time, grow the window
+      if (timeSinceLastBeat > expectedBeatInterval) {
+        windowDuration = Math.min(windowDuration, this.maxRmsWindow);
+      }
+    } else {
+      // No beat pattern yet, use max window
+      windowDuration = Math.min(windowDuration, this.maxRmsWindow);
+    }
+
+    // Calculate average RMS over window
+    const spectralFeatures = this.spectralFeaturesData;
+    let sum = 0;
+    let count = 0;
+
+    for (const feature of spectralFeatures) {
+      if (feature.time >= windowStart && feature.time <= currentTime) {
+        sum += feature.rms_energy;
+        count++;
+      }
+    }
+
+    return count > 0 ? sum / count : 0;
+  }
+
+  private updateVelocity(currentTime: number): void {
+    const spectralData = this.getSpectralFeatureAtTime(currentTime);
+    if (!spectralData) return;
+
+    const averageRMS = this.getWindowedAverageRMS(currentTime);
+    const currentRMS = spectralData.rms_energy;
+    const rmsDifference = currentRMS - averageRMS;
+
+    // Normalize the difference by average RMS
+    const normalizedDifference =
+      averageRMS > 0 ? rmsDifference / averageRMS : 0;
+
+    // Check if difference is miniscule (less than 10% of averaged RMS)
+    const isMiniscule = Math.abs(normalizedDifference) < 0.1;
+
+    if (isMiniscule) {
+      // Apply small acceleration toward original velocity
+      const velocityDiff = new THREE.Vector2().subVectors(
+        this.originalVelocity,
+        this.currentVelocity
+      );
+
+      // Only apply if velocity is not already close to original
+      if (velocityDiff.length() > 0.01) {
+        const returnAccel = velocityDiff
+          .normalize()
+          .multiplyScalar(this.returnAcceleration);
+        this.currentVelocity.add(returnAccel);
+      }
+    } else {
+      // Apply acceleration based on RMS difference
+      if (this.currentVelocity.length() > 0) {
+        const velocityDirection = this.currentVelocity.clone().normalize();
+        const acceleration = velocityDirection.multiplyScalar(
+          normalizedDifference * this.accelerationScale
+        );
+
+        this.currentVelocity.add(acceleration);
+      }
+    }
+
+    // Clamp velocity to minimum threshold
+    if (this.currentVelocity.length() < this.minVelocityThreshold) {
+      this.currentVelocity.set(0, 0);
+    }
   }
 
   private mirrorPositionAtBoundary(
