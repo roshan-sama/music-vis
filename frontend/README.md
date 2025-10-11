@@ -57,3 +57,9 @@ Angular CLI does not come with an end-to-end testing framework by default. You c
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+
+# Screen recording using ffmpeg
+
+`ffmpeg -f x11grab -s "1920x1080" -i :0.0 -f pulse -i alsa_output.pci-0000_00_1b.0.analog-stereo.monitor output.mkv`
+
+alsa_output.pci-0000_00_1b.0.analog-stereo.monitor might be different, and the type of audio might not be pulse either, so you may need to google this

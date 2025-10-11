@@ -44,9 +44,3 @@ dance-video:   0%| | 0/467 [00:00<?, ?it/s]/usr/local/lib/python3.11/site-packag
   warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
 dance-video: 100%|█| 467/467 [00:26<00:00,
 ```
-
-# Screen recording using ffmpeg
-
-`ffmpeg -f x11grab -s "1920x1080" -i :0.0 -f pulse -i alsa_output.pci-0000_00_1b.0.analog-stereo.monitor output.mkv`
-
-alsa_output.pci-0000_00_1b.0.analog-stereo.monitor might be different, and the type of audio might not be pulse either, so you may need to google this

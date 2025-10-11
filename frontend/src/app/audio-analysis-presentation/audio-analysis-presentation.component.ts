@@ -15,11 +15,8 @@ import { HttpClient } from '@angular/common/http';
 import * as THREE from 'three';
 import { Howl } from 'howler';
 import { lastValueFrom } from 'rxjs';
-
-interface PitchData {
-  time: number;
-  dominant_pitches: Array<{ pitch: string; strength: number }>;
-}
+import { PitchData } from '../interfaces/pitch-analysis-data';
+import { updateVisualization } from '../utils/audio-analysis';
 
 interface SpectralFeature {
   time: number;
@@ -159,7 +156,7 @@ export class AudioAnalysisPresentationComponent
   spectralFeaturesData: SpectralFeature[] = [];
 
   // Translation parameters
-  private maxRadius = 3;
+  private maxRadius = 5;
   private spherePosition = new THREE.Vector2(0, 0);
   private targetPosition = new THREE.Vector2(0, 0);
   private positionLerpSpeed = 0.1;
@@ -240,7 +237,7 @@ export class AudioAnalysisPresentationComponent
   }
 
   private createScene(): void {
-    const geometry = new THREE.SphereGeometry(1, 32, 32);
+    const geometry = new THREE.SphereGeometry(0.4, 32, 32);
     const material = new THREE.MeshPhongMaterial({
       color: 0x4a90e2,
       shininess: 100,
@@ -363,7 +360,7 @@ export class AudioAnalysisPresentationComponent
     const baseAngle = normalizedCentroid * Math.PI * 2;
     const rotationOffset = ((this.beatCounter % 2) * Math.PI) / 4; // 0 or π
     const angle = baseAngle + rotationOffset;
-    const distance = normalizedRolloff * (this.maxRadius * 0.8);
+    const distance = normalizedRolloff * (this.maxRadius - 2);
 
     // Calculate new position
     const newX = Math.cos(angle) * distance;
@@ -372,10 +369,7 @@ export class AudioAnalysisPresentationComponent
 
     // Check if new position is outside the circle
     if (newPosition.length() > this.maxRadius) {
-      newPosition = this.mirrorPositionAtBoundary(
-        this.spherePosition,
-        newPosition
-      );
+      newPosition = new THREE.Vector2(0, 0);
     }
 
     // Set target position for smooth interpolation
@@ -464,7 +458,9 @@ export class AudioAnalysisPresentationComponent
   }
 
   updateVisualizationByTime(currentTime: number): void {
-    if (this.pitchAnalysisData.length === 0) return;
+    if (this.pitchAnalysisData.length === 0) {
+      return;
+    }
 
     let closestIndex = 0;
     let closestTimeDiff = Math.abs(
@@ -479,30 +475,12 @@ export class AudioAnalysisPresentationComponent
       }
     }
 
-    this.updateVisualization(closestIndex);
-  }
-
-  private updateVisualization(timeIndex: number): void {
-    if (timeIndex < this.pitchAnalysisData.length) {
-      const currentData = this.pitchAnalysisData[timeIndex];
-
-      if (
-        currentData.dominant_pitches &&
-        currentData.dominant_pitches.length > 0
-      ) {
-        const dominantStrength = currentData.dominant_pitches[0].strength;
-        const hue = dominantStrength * 360;
-        const saturation = 70;
-        const lightness = 50 + dominantStrength * 30;
-
-        const material = this.sphere.material as THREE.MeshPhongMaterial;
-        material.color.setHSL(hue / 360, saturation / 100, lightness / 100);
-      }
-
-      const baseScale = 1;
-      const pulseScale = baseScale + this.beatPulseStrength * 0.3;
-      this.sphere.scale.setScalar(pulseScale);
-    }
+    updateVisualization(
+      closestIndex,
+      this.pitchAnalysisData,
+      this.beatPulseStrength,
+      this.sphere
+    );
   }
 
   seekTo(time: number): void {
