@@ -44,11 +44,6 @@ interface AnalysisData {
       <div class="canvas-wrapper">
         <canvas #threeCanvas></canvas>
       </div>
-
-      <div class="info-overlay">
-        <h3>Audio Analysis</h3>
-        <p>3D pitch visualization with beat detection</p>
-      </div>
     </div>
   `,
   styles: [
@@ -103,8 +98,7 @@ interface AnalysisData {
   ],
 })
 export class AudioAnalysisPresentationComponent
-  implements OnInit, AfterViewInit, OnDestroy
-{
+  implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('threeCanvas', { static: true })
   canvasRef!: ElementRef<HTMLCanvasElement>;
 
@@ -134,6 +128,8 @@ export class AudioAnalysisPresentationComponent
   @Output() timeUpdate = new EventEmitter<number>();
   @Output() durationLoaded = new EventEmitter<number>();
   @Output() playStateChange = new EventEmitter<boolean>();
+
+  public formattedTime: string = '0:00';
 
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
@@ -181,11 +177,11 @@ export class AudioAnalysisPresentationComponent
   // Velocity physics constants
   private velocityScale: number = 1.0; // Scale factor for velocity magnitude
   private accelerationScale: number = 1; // Scale for RMS-based acceleration
-  private returnAcceleration: number = 3; // Acceleration toward original velocity
+  private returnAcceleration: number = 0.2; // Acceleration toward original velocity
   private minVelocityThreshold: number = 0.005;
   private maxVelocityThreshold: number = 5;
   private maxRmsWindow: number = 4.0; // 4 seconds max
-  private onsetBoostFactor = 1.05;
+  private onsetBoostFactor = 1.5;
   private dominantPitchStrengthMin = 0.7;
   private otherPitchStrengthMax = 0.5;
 
@@ -227,7 +223,7 @@ export class AudioAnalysisPresentationComponent
   private readonly cameraKp = 5.0; // Proportional gain - adjust for responsiveness
   private readonly cameraKi = 0.5; // Integral gain - adjust to eliminate steady-state error
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   ngOnInit(): void {
     this.loadAnalysisData();
@@ -288,8 +284,8 @@ export class AudioAnalysisPresentationComponent
 
   private initThreeJS(): void {
     const canvas = this.canvasRef.nativeElement;
-    const width = 1600;
-    const height = 800;
+    const width = 2560;
+    const height = 1075;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xff8c42); // Orange background
@@ -353,6 +349,7 @@ export class AudioAnalysisPresentationComponent
 
     if (this.sound && this.sound.playing()) {
       this.currentTime = (this.sound.seek() as number) || 0;
+      // this.formattedTime = this.formatTime(this.currentTime); // Add this line
       this.timeUpdate.emit(this.currentTime);
 
       // Calculate deltaTime for physics
@@ -380,11 +377,6 @@ export class AudioAnalysisPresentationComponent
           .clone()
           .multiplyScalar(deltaTime);
         this.spherePosition.add(velocityDelta);
-
-        // Ensure position stays within bounds
-        if (this.spherePosition.length() >= this.maxRadius * 0.95) {
-          this.spherePosition.set(0, 0);
-        }
       }
 
       // Update sphere mesh position
@@ -944,10 +936,16 @@ export class AudioAnalysisPresentationComponent
     this.camera.position.y += correctionY * deltaTime;
 
     // Always point camera at sphere (snap rotation)
-    this.camera.lookAt(
-      this.spherePosition.x,
-      this.spherePosition.y,
-      this.sphere.position.z
-    );
+    // this.camera.lookAt(
+    //   this.spherePosition.x,
+    //   this.spherePosition.y,
+    //   this.sphere.position.z
+    // );
+  }
+
+  private formatTime(timeInSeconds: number): string {
+    const minutes = Math.floor(timeInSeconds / 60);
+    const seconds = Math.floor(timeInSeconds % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 }
