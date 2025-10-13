@@ -30,6 +30,7 @@ interface AnalysisData {
   pitch_analysis: PitchData[];
   temporal_features: {
     beats: number[];
+    onsets: number[];
     spectral_features: SpectralFeature[];
   };
 }
@@ -145,6 +146,7 @@ export class AudioAnalysisPresentationComponent
   duration = 0;
 
   private beats: number[] = [];
+  private onsets: number[] = [];
   private currentBeatIndex = 0;
   beatPulseStrength = 0;
   private beatPulseDecay = 0.95;
@@ -173,14 +175,21 @@ export class AudioAnalysisPresentationComponent
   private originalVelocity: THREE.Vector2 = new THREE.Vector2(0, 0);
   private lastTwoBeats: number[] = [];
   private rmsWindowStart: number = 0;
-  private maxRmsWindow: number = 4.0; // 4 seconds max
   private lastFrameTime: number = 0;
 
   // Velocity physics constants
-  private velocityScale: number = 1; // Scale factor for velocity magnitude
+  private velocityScale: number = 1.32; // Scale factor for velocity magnitude
+  private accelerationScale: number = 0.8; // Scale for RMS-based acceleration
+  private returnAcceleration: number = 0.2; // Acceleration toward original velocity
+  private minVelocityThreshold: number = 0.01;
+  private maxRmsWindow: number = 8.0; // 4 seconds max
+  private onsetBoostFactor = 4;
+
+  /**Power up
+   * private velocityScale: number = 1; // Scale factor for velocity magnitude
   private accelerationScale: number = 0.2; // Scale for RMS-based acceleration
   private returnAcceleration: number = 0.05; // Acceleration toward original velocity
-  private minVelocityThreshold: number = 0.01;
+  private minVelocityThreshold: number = 0.01; */
 
   constructor(private http: HttpClient) {}
 
@@ -215,6 +224,7 @@ export class AudioAnalysisPresentationComponent
       if (data) {
         this.pitchAnalysisData = data.pitch_analysis;
         this.beats = data.temporal_features.beats;
+        this.onsets = data.temporal_features.onsets;
         this.spectralFeaturesData = data.temporal_features.spectral_features;
 
         // Initialize smoothed values
@@ -303,10 +313,10 @@ export class AudioAnalysisPresentationComponent
         this.spherePosition.add(velocityDelta);
 
         // Ensure position stays within bounds
-        if (this.spherePosition.length() > this.maxRadius) {
+        if (this.spherePosition.length() >= this.maxRadius * 0.95) {
           this.spherePosition.normalize().multiplyScalar(this.maxRadius);
           // Stop velocity at boundary
-          this.currentVelocity.set(0, 0);
+          this.spherePosition.set(0, 0);
         }
       }
 
@@ -393,6 +403,23 @@ export class AudioAnalysisPresentationComponent
         this.currentBeatIndex++;
       }
     }
+  }
+
+  private getOnsetStrengthAtTime(currentTime: number): number {
+    // Find nearest onset within a small time window (e.g., 50ms)
+    const tolerance = 0.05; // 50ms
+    const nearestOnset = this.onsets.find(
+      (onset) => Math.abs(onset - currentTime) < tolerance
+    );
+
+    if (nearestOnset) {
+      // Return strength that decays quickly after the onset
+      const timeSinceOnset = currentTime - nearestOnset;
+      const decay = Math.exp(-timeSinceOnset * 20); // Fast decay
+      return decay;
+    }
+
+    return 0;
   }
 
   private updateSpherePosition(currentTime: number): void {
@@ -505,6 +532,8 @@ export class AudioAnalysisPresentationComponent
     const spectralData = this.getSpectralFeatureAtTime(currentTime);
     if (!spectralData) return;
 
+    const onsetStrength = this.getOnsetStrengthAtTime(currentTime);
+
     const averageRMS = this.getWindowedAverageRMS(currentTime);
     const currentRMS = spectralData.rms_energy;
     const rmsDifference = currentRMS - averageRMS;
@@ -515,6 +544,8 @@ export class AudioAnalysisPresentationComponent
 
     // Check if difference is miniscule (less than 10% of averaged RMS)
     const isMiniscule = Math.abs(normalizedDifference) < 0.1;
+
+    const onsetMultiplier = 1.0 + onsetStrength * this.onsetBoostFactor;
 
     if (isMiniscule) {
       // Apply small acceleration toward original velocity
@@ -535,7 +566,7 @@ export class AudioAnalysisPresentationComponent
       if (this.currentVelocity.length() > 0) {
         const velocityDirection = this.currentVelocity.clone().normalize();
         const acceleration = velocityDirection.multiplyScalar(
-          normalizedDifference * this.accelerationScale
+          normalizedDifference * this.accelerationScale * onsetMultiplier
         );
 
         this.currentVelocity.add(acceleration);

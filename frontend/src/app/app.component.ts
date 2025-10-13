@@ -19,14 +19,17 @@ interface Analysis {
     <div class="analysis-list-container">
       <header class="header">
         <h1>Analysis Dashboard</h1>
-        <p>Select an analysis to view synchronized audio and video visualization</p>
+        <p>
+          Select an analysis to view synchronized audio and video visualization
+        </p>
       </header>
 
       <div class="analysis-grid">
-        <div 
-          *ngFor="let analysis of analyses" 
+        <div
+          *ngFor="let analysis of analyses"
           class="analysis-card"
-          [routerLink]="['/analysis', analysis.id]">
+          [routerLink]="['/analysis', analysis.id]"
+        >
           <div class="card-content">
             <h3>{{ analysis.title }}</h3>
             <p class="description">{{ analysis.description }}</p>
@@ -44,17 +47,32 @@ interface Analysis {
       <router-outlet></router-outlet>
     </div>
   `,
-  styleUrls: ['./app.component.css']
+  styleUrls: ['./app.component.css'],
 })
 export class AppComponent {
   analyses: Analysis[] = [
     {
       id: 'power-up',
       title: 'Power Up - Dance Visualization',
-      description: 'Synchronized audio pitch analysis and dance keypoint visualization',
+      description:
+        'Synchronized audio pitch analysis and dance keypoint visualization',
       artist: 'Power Up',
-      track: 'Dance Visualization'
-    }
+      track: 'Dance Visualization',
+    },
+    {
+      id: 'aerials',
+      title: 'Aerials',
+      description: '',
+      artist: '',
+      track: 'Dance Visualization',
+    },
+    {
+      id: 'f-force',
+      title: 'Fire Force',
+      description: '',
+      artist: '',
+      track: 'Visualization',
+    },
     // Add more analyses here as they become available
   ];
 }
