@@ -140,6 +140,7 @@ export class AudioAnalysisPresentationComponent
   private renderer!: THREE.WebGLRenderer;
   private sphere!: THREE.Mesh;
   private animationId!: number;
+  private gridHelper!: THREE.GridHelper;
 
   private sound!: Howl;
   currentTime = 0;
@@ -221,6 +222,11 @@ export class AudioAnalysisPresentationComponent
   private readonly innerRadius = 0.5;
   private readonly outerRadiusMax = 1.0;
 
+  private cameraError: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private accumulatedError: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private readonly cameraKp = 5.0; // Proportional gain - adjust for responsiveness
+  private readonly cameraKi = 0.5; // Integral gain - adjust to eliminate steady-state error
+
   constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
@@ -250,6 +256,9 @@ export class AudioAnalysisPresentationComponent
       this.scene.remove(mesh);
     });
     this.pitchRings.clear();
+    this.gridHelper.geometry.dispose();
+    (this.gridHelper.material as THREE.Material).dispose();
+    this.scene.remove(this.gridHelper);
   }
 
   private async loadAnalysisData(): Promise<void> {
@@ -279,11 +288,11 @@ export class AudioAnalysisPresentationComponent
 
   private initThreeJS(): void {
     const canvas = this.canvasRef.nativeElement;
-    const width = 1600; // canvas.clientWidth;
-    const height = 800; // canvas.clientHeight;
+    const width = 1600;
+    const height = 800;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0f0f0f);
+    this.scene.background = new THREE.Color(0xff8c42); // Orange background
 
     this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     this.camera.position.set(0, 0, 5);
@@ -295,7 +304,25 @@ export class AudioAnalysisPresentationComponent
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(window.devicePixelRatio);
 
+    // Create infinite grid
+    this.createInfiniteGrid();
+
     window.addEventListener('resize', () => this.onWindowResize());
+  }
+
+  private createInfiniteGrid(): void {
+    const size = 100; // Large grid size
+    const divisions = 100; // Number of divisions
+
+    this.gridHelper = new THREE.GridHelper(size, divisions, 0x8b4513, 0x8b4513); // Brown color
+
+    // Rotate grid to XY plane (perpendicular to camera view)
+    this.gridHelper.rotation.x = Math.PI / 2;
+
+    // Position grid slightly behind everything
+    this.gridHelper.position.z = -0.5;
+
+    this.scene.add(this.gridHelper);
   }
 
   private createScene(): void {
@@ -363,6 +390,10 @@ export class AudioAnalysisPresentationComponent
       // Update sphere mesh position
       this.sphere.position.x = this.spherePosition.x;
       this.sphere.position.y = this.spherePosition.y;
+
+      // Make camera follow sphere position
+      // Update camera with PI control and point at sphere
+      this.updateCameraPosition(deltaTime);
     }
 
     this.beatPulseStrength *= this.beatPulseDecay;
@@ -886,5 +917,37 @@ export class AudioAnalysisPresentationComponent
     );
 
     return direction.normalize();
+  }
+
+  private updateCameraPosition(deltaTime: number): void {
+    // Calculate error (where sphere is vs where camera is)
+    this.cameraError.set(
+      this.spherePosition.x - this.camera.position.x,
+      this.spherePosition.y - this.camera.position.y
+    );
+
+    // Accumulate error for integral term
+    this.accumulatedError.x += this.cameraError.x * deltaTime;
+    this.accumulatedError.y += this.cameraError.y * deltaTime;
+
+    // PI control: P term + I term
+    const correctionX =
+      this.cameraKp * this.cameraError.x +
+      this.cameraKi * this.accumulatedError.x;
+
+    const correctionY =
+      this.cameraKp * this.cameraError.y +
+      this.cameraKi * this.accumulatedError.y;
+
+    // Apply correction
+    this.camera.position.x += correctionX * deltaTime;
+    this.camera.position.y += correctionY * deltaTime;
+
+    // Always point camera at sphere (snap rotation)
+    this.camera.lookAt(
+      this.spherePosition.x,
+      this.spherePosition.y,
+      this.sphere.position.z
+    );
   }
 }
