@@ -15,7 +15,7 @@ import { HttpClient } from '@angular/common/http';
 import * as THREE from 'three';
 import { Howl } from 'howler';
 import { lastValueFrom } from 'rxjs';
-import { PitchData } from '../interfaces/pitch-analysis-data';
+import { notes, PitchData } from '../interfaces/pitch-analysis-data';
 import { updateVisualization } from '../utils/audio-analysis';
 
 interface SpectralFeature {
@@ -158,7 +158,7 @@ export class AudioAnalysisPresentationComponent
   spectralFeaturesData: SpectralFeature[] = [];
 
   // Translation parameters
-  private maxRadius = 5;
+  private maxRadius = 3;
   private spherePosition = new THREE.Vector2(0, 0);
   private targetPosition = new THREE.Vector2(0, 0);
   private positionLerpSpeed = 0.1;
@@ -178,18 +178,48 @@ export class AudioAnalysisPresentationComponent
   private lastFrameTime: number = 0;
 
   // Velocity physics constants
-  private velocityScale: number = 1.32; // Scale factor for velocity magnitude
+  private velocityScale: number = 1.0; // Scale factor for velocity magnitude
+  private accelerationScale: number = 1; // Scale for RMS-based acceleration
+  private returnAcceleration: number = 3; // Acceleration toward original velocity
+  private minVelocityThreshold: number = 0.005;
+  private maxVelocityThreshold: number = 5;
+  private maxRmsWindow: number = 4.0; // 4 seconds max
+  private onsetBoostFactor = 1.05;
+  private dominantPitchStrengthMin = 0.7;
+  private otherPitchStrengthMax = 0.5;
+
+  /**Fire force
+   * private velocityScale: number = 1.32; // Scale factor for velocity magnitude
   private accelerationScale: number = 0.8; // Scale for RMS-based acceleration
   private returnAcceleration: number = 0.2; // Acceleration toward original velocity
   private minVelocityThreshold: number = 0.01;
   private maxRmsWindow: number = 8.0; // 4 seconds max
-  private onsetBoostFactor = 4;
+  private onsetBoostFactor = 4; */
 
   /**Power up
    * private velocityScale: number = 1; // Scale factor for velocity magnitude
   private accelerationScale: number = 0.2; // Scale for RMS-based acceleration
   private returnAcceleration: number = 0.05; // Acceleration toward original velocity
   private minVelocityThreshold: number = 0.01; */
+
+  //Pitch Rings
+  private pitchRings: Map<notes, THREE.Mesh> = new Map();
+  private readonly noteOrder: notes[] = [
+    'C',
+    'C#',
+    'D',
+    'D#',
+    'E',
+    'F',
+    'F#',
+    'G',
+    'G#',
+    'A',
+    'A#',
+    'B',
+  ];
+  private readonly innerRadius = 0.5;
+  private readonly outerRadiusMax = 1.0;
 
   constructor(private http: HttpClient) {}
 
@@ -214,6 +244,12 @@ export class AudioAnalysisPresentationComponent
     if (this.sound) {
       this.sound.unload();
     }
+    this.pitchRings.forEach((mesh) => {
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+      this.scene.remove(mesh);
+    });
+    this.pitchRings.clear();
   }
 
   private async loadAnalysisData(): Promise<void> {
@@ -243,8 +279,8 @@ export class AudioAnalysisPresentationComponent
 
   private initThreeJS(): void {
     const canvas = this.canvasRef.nativeElement;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
+    const width = 1600; // canvas.clientWidth;
+    const height = 800; // canvas.clientHeight;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0f0f0f);
@@ -282,6 +318,7 @@ export class AudioAnalysisPresentationComponent
     const pointLight = new THREE.PointLight(0xffffff, 0.3);
     pointLight.position.set(-5, -5, 5);
     this.scene.add(pointLight);
+    this.createPitchRings();
   }
 
   private animate(): void {
@@ -302,8 +339,13 @@ export class AudioAnalysisPresentationComponent
       // Check for beats and update target position
       this.checkForBeat(this.currentTime);
 
+      // Check for dominant pitch direction (before updateVelocity)
+      const dominantDirection = this.getDominantPitchDirection(
+        this.currentTime
+      );
+
       // Update velocity based on RMS energy
-      this.updateVelocity(this.currentTime);
+      this.updateVelocity(this.currentTime, dominantDirection);
 
       // Apply velocity to position
       if (deltaTime > 0) {
@@ -314,8 +356,6 @@ export class AudioAnalysisPresentationComponent
 
         // Ensure position stays within bounds
         if (this.spherePosition.length() >= this.maxRadius * 0.95) {
-          this.spherePosition.normalize().multiplyScalar(this.maxRadius);
-          // Stop velocity at boundary
           this.spherePosition.set(0, 0);
         }
       }
@@ -326,6 +366,9 @@ export class AudioAnalysisPresentationComponent
     }
 
     this.beatPulseStrength *= this.beatPulseDecay;
+
+    // Update pitch ring segments
+    this.updatePitchRings(this.currentTime);
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -528,7 +571,10 @@ export class AudioAnalysisPresentationComponent
     return count > 0 ? sum / count : 0;
   }
 
-  private updateVelocity(currentTime: number): void {
+  private updateVelocity(
+    currentTime: number,
+    dominantDirection: THREE.Vector2 | null
+  ): void {
     const spectralData = this.getSpectralFeatureAtTime(currentTime);
     if (!spectralData) return;
 
@@ -546,6 +592,12 @@ export class AudioAnalysisPresentationComponent
     const isMiniscule = Math.abs(normalizedDifference) < 0.1;
 
     const onsetMultiplier = 1.0 + onsetStrength * this.onsetBoostFactor;
+
+    // Hard direction change if dominant pitch exists
+    if (dominantDirection) {
+      const currentSpeed = this.currentVelocity.length();
+      this.currentVelocity.copy(dominantDirection).multiplyScalar(currentSpeed);
+    }
 
     if (isMiniscule) {
       // Apply small acceleration toward original velocity
@@ -574,8 +626,14 @@ export class AudioAnalysisPresentationComponent
     }
 
     // Clamp velocity to minimum threshold
-    if (this.currentVelocity.length() < this.minVelocityThreshold) {
+    if (this.currentVelocity.length() <= this.minVelocityThreshold) {
       this.currentVelocity.set(0, 0);
+    }
+
+    if (this.currentVelocity.length() >= this.maxVelocityThreshold) {
+      this.currentVelocity
+        .normalize()
+        .multiplyScalar(this.maxVelocityThreshold);
     }
   }
 
@@ -686,5 +744,147 @@ export class AudioAnalysisPresentationComponent
     // Update position immediately when seeking
     this.updateSpherePosition(time);
     this.spherePosition.copy(this.targetPosition);
+  }
+
+  // Pitch Rings
+  private createPitchRings(): void {
+    const segmentAngle = (Math.PI * 2) / 12; // 360° / 12 notes
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.8,
+    });
+
+    this.noteOrder.forEach((note, index) => {
+      const thetaStart = index * segmentAngle;
+      const geometry = new THREE.RingGeometry(
+        this.innerRadius,
+        this.innerRadius, // Start with minimum size
+        32,
+        1,
+        thetaStart,
+        segmentAngle
+      );
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.z = -0.1; // Slightly behind sphere
+      this.scene.add(mesh);
+      this.pitchRings.set(note, mesh);
+    });
+  }
+
+  private updatePitchRings(currentTime: number): void {
+    const pitchData = this.getPitchDataAtTime(currentTime);
+    if (!pitchData) return;
+
+    const segmentAngle = (Math.PI * 2) / 12;
+    const minCutoff = 0.5;
+    const maxCutoff = 0.7;
+
+    this.noteOrder.forEach((note, index) => {
+      const mesh = this.pitchRings.get(note);
+      if (!mesh) return;
+
+      const rawStrength = pitchData.all_pitches[note];
+
+      // Apply linear interpolation with cutoffs
+      let scaledStrength: number;
+      if (rawStrength <= minCutoff) {
+        scaledStrength = 0;
+      } else if (rawStrength >= maxCutoff) {
+        scaledStrength = 1;
+      } else {
+        // Linear interpolation between minCutoff and maxCutoff
+        scaledStrength = (rawStrength - minCutoff) / (maxCutoff - minCutoff);
+      }
+
+      // Outer radius varies from innerRadius to outerRadiusMax based on scaled strength
+      const outerRadius =
+        this.innerRadius +
+        scaledStrength * (this.outerRadiusMax - this.innerRadius);
+
+      // Recreate geometry with new outer radius
+      const thetaStart = index * segmentAngle;
+      const newGeometry = new THREE.RingGeometry(
+        this.innerRadius,
+        outerRadius,
+        32,
+        1,
+        thetaStart,
+        segmentAngle
+      );
+
+      // Dispose old geometry and update
+      mesh.geometry.dispose();
+      mesh.geometry = newGeometry;
+
+      // Position rings at sphere's current position
+      mesh.position.x = this.spherePosition.x;
+      mesh.position.y = this.spherePosition.y;
+    });
+  }
+
+  private getPitchDataAtTime(time: number): PitchData | null {
+    if (!this.pitchAnalysisData || this.pitchAnalysisData.length === 0)
+      return null;
+
+    // Find closest pitch data point
+    let closest = this.pitchAnalysisData[0];
+    let minDiff = Math.abs(this.pitchAnalysisData[0].time - time);
+
+    for (const data of this.pitchAnalysisData) {
+      const diff = Math.abs(data.time - time);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = data;
+      }
+    }
+
+    return closest;
+  }
+
+  private getDominantPitchDirection(currentTime: number): THREE.Vector2 | null {
+    const pitchData = this.getPitchDataAtTime(currentTime);
+    if (!pitchData) return null;
+
+    let dominantNote: notes | null = null;
+    let dominantStrength = 0;
+
+    // Find pitch above threshold
+    for (const note of this.noteOrder) {
+      const strength = pitchData.all_pitches[note];
+      if (
+        strength >= this.dominantPitchStrengthMin &&
+        strength > dominantStrength
+      ) {
+        dominantNote = note;
+        dominantStrength = strength;
+      }
+    }
+
+    // If no dominant pitch found, return null
+    if (!dominantNote) return null;
+
+    // Check that all other pitches are below max threshold
+    for (const note of this.noteOrder) {
+      if (note === dominantNote) continue;
+      if (pitchData.all_pitches[note] > this.otherPitchStrengthMax) {
+        return null; // Multiple strong pitches, no single dominant
+      }
+    }
+
+    // Calculate direction based on pitch position in ring
+    const noteIndex = this.noteOrder.indexOf(dominantNote);
+    const segmentAngle = (Math.PI * 2) / 12;
+    const pitchAngle = noteIndex * segmentAngle + segmentAngle / 2; // Center of segment
+
+    // Convert angle to direction vector
+    const direction = new THREE.Vector2(
+      Math.cos(pitchAngle),
+      Math.sin(pitchAngle)
+    );
+
+    return direction.normalize();
   }
 }

@@ -73,6 +73,13 @@ export class AppComponent {
       artist: '',
       track: 'Visualization',
     },
+    {
+      id: 'bei-mir',
+      title: 'Bei Mir Bist Du Schön',
+      description: '',
+      artist: '',
+      track: 'Visualization',
+    },
     // Add more analyses here as they become available
   ];
 }
