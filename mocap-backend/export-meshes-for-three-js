@@ -1,0 +1,93 @@
+import json
+import numpy as np
+import torch
+from pathlib import Path
+from easymocap.bodymodel.smpl import SMPLModel
+
+print("Loading SMPL model...")
+body_model = SMPLModel(
+    '/app/EasyMocap/data/bodymodels/SMPL_python_v.1.1.0/smpl/models/basicmodel_neutral_lbs_10_207_0_v1.1.0.pkl',
+    device='cpu'
+)
+
+input_dir = Path('/app/data/output-smpl-3d/smpl')
+output_dir = Path('/app/data/output-mesh-data')
+output_dir.mkdir(exist_ok=True)
+
+# Export face indices once (they're the same for all frames)
+print("Exporting SMPL topology...")
+faces = body_model.faces.tolist()
+topology = {
+    'faces': faces,
+    'num_vertices': 6890
+}
+
+with open(output_dir / 'topology.json', 'w') as f:
+    json.dump(topology, f)
+
+print(f"Topology saved: {len(faces)} faces, {topology['num_vertices']} vertices")
+
+# Check the expected shape dimension
+print(f"Model shape_blend_shapes size: {body_model.shapedirs.shape}")
+
+# Process each frame
+json_files = sorted(input_dir.glob('*.json'))
+total = len(json_files)
+
+for idx, json_file in enumerate(json_files):
+    with open(json_file) as f:
+        data = json.load(f)
+    
+    frame_data = []
+    
+    for person in data:
+        try:
+            # Convert to torch tensors
+            Rh = torch.FloatTensor(person['Rh'])
+            Th = torch.FloatTensor(person['Th'])
+            poses = torch.FloatTensor(person['poses'])
+            shapes = torch.FloatTensor(person['shapes'])
+            
+            # Pad shapes if needed to match model's expected size
+            expected_shape_dim = body_model.shapedirs.shape[2]
+            if shapes.shape[1] < expected_shape_dim:
+                padding = torch.zeros(shapes.shape[0], expected_shape_dim - shapes.shape[1])
+                shapes = torch.cat([shapes, padding], dim=1)
+            elif shapes.shape[1] > expected_shape_dim:
+                shapes = shapes[:, :expected_shape_dim]
+            
+            params = {
+                'Rh': Rh,
+                'Th': Th,
+                'poses': poses,
+                'shapes': shapes
+            }
+            
+            # Compute vertices
+            output = body_model(return_verts=True, return_tensor=True, **params)
+            vertices = output[0].detach().cpu().numpy()
+            
+            # Round to reduce file size (3 decimal places is plenty)
+            vertices = np.round(vertices, 3).tolist()
+            
+            frame_data.append({
+                'id': person['id'],
+                'vertices': vertices,
+                'Th': person['Th'],
+                'Rh': person['Rh']
+            })
+            
+        except Exception as e:
+            print(f"Error processing person {person['id']} in frame {json_file.name}: {e}")
+            continue
+    
+    # Save frame mesh data
+    output_file = output_dir / json_file.name
+    with open(output_file, 'w') as f:
+        json.dump(frame_data, f)
+    
+    if (idx + 1) % 10 == 0:
+        print(f"Processed {idx + 1}/{total} frames...")
+
+print(f"\nDone! Exported {total} frames to {output_dir}")
+print(f"Total files: {total} frame files + 1 topology file")

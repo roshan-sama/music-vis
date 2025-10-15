@@ -32,6 +32,8 @@ You should see the output "ffmpeg -i ..." above invoked by your command, followe
 
 # Keypoint extraction
 
+## Holistic, just 2D points:
+
 `python EasyMocap/apps/preprocess/extract_keypoints.py /app/data --mode mp-holistic`
 
 Output might looks something like this
@@ -44,3 +46,21 @@ dance-video:   0%| | 0/467 [00:00<?, ?it/s]/usr/local/lib/python3.11/site-packag
   warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
 dance-video: 100%|█| 467/467 [00:26<00:00,
 ```
+
+## Mirror video 3D extraction
+
+`python3 EasyMocap/apps/preprocess/extract_keypoints.py /app/data/ --mode yolo-hrnet`
+
+Make sure to copy body models. If the data isn't in this repo, in data/bodymodels you'll have to create an account and download the data: from https://smpl.is.tue.mpg.de
+`cp /app/data/bodymodels/ /app/EasyMocap/data/bodymodels/ -r`
+
+The body mesh files are named like this:
+
+```
+./SMPL_python_v.1.1.0/smpl/models/basicmodel_neutral_lbs_10_207_0_v1.1.0.pkl
+./SMPL_python_v.1.1.0/smpl/models/basicmodel_m_lbs_10_207_0_v1.1.0.pkl
+./SMPL_python_v.1.1.0/smpl/models/basicmodel_f_lbs_10_207_0_v1.1.0.pkl
+```
+
+Change the fps parameter to what your video uses
+`cd EasyMocap; python3 apps/demo/mocap.py /app/data/ --work mirror --fps 30 --vis_scale 0.5`
